@@ -23,7 +23,7 @@ export default function Sidebar({ onUploadComplete, activeCollectionId, activeTa
             if (!activeCollectionId) return;
             setIsLoadingTopics(true);
             try {
-                const res = await axios.get(`http://localhost:8000/api/v1/learning/metadata/${activeCollectionId}`);
+                const res = await axios.get(`https://ai-learning-assistant-backend-lyhw.onrender.com/api/v1/learning/metadata/${activeCollectionId}`);
                 if (res.data.topics) {
                     setTopics(res.data.topics);
                 }
@@ -47,7 +47,7 @@ export default function Sidebar({ onUploadComplete, activeCollectionId, activeTa
         formData.append('file', file);
 
         try {
-            const response = await axios.post('http://localhost:8000/api/v1/ingestion/upload', formData, {
+            const response = await axios.post('https://ai-learning-assistant-backend-lyhw.onrender.com/api/v1/ingestion/upload', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
 

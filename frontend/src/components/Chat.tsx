@@ -19,7 +19,7 @@ export default function Chat({ collectionId }: { collectionId: string }) {
     useEffect(() => {
         const fetchHistory = async () => {
             try {
-                const res = await axios.get(`http://localhost:8000/api/v1/chat/history/${collectionId}`);
+                const res = await axios.get(`https://ai-learning-assistant-backend-lyhw.onrender.com/api/v1/chat/history/${collectionId}`);
                 if (res.data.history && res.data.history.length > 0) {
                     setMessages(res.data.history.map((h: any) => ({
                         role: h.role === 'user' ? 'user' : 'bot',
@@ -38,7 +38,7 @@ export default function Chat({ collectionId }: { collectionId: string }) {
     useEffect(() => {
         const fetchSuggestions = async () => {
             try {
-                const res = await axios.get(`http://localhost:8000/api/v1/learning/metadata/${collectionId}`);
+                const res = await axios.get(`https://ai-learning-assistant-backend-lyhw.onrender.com/api/v1/learning/metadata/${collectionId}`);
                 if (res.data.suggested_questions) {
                     setSuggestions(res.data.suggested_questions);
                 }
@@ -65,7 +65,7 @@ export default function Chat({ collectionId }: { collectionId: string }) {
         setIsLoading(true);
 
         try {
-            const response = await axios.post('http://localhost:8000/api/v1/chat/query', {
+            const response = await axios.post('https://ai-learning-assistant-backend-lyhw.onrender.com/api/v1/chat/query', {
                 query: userMessage,
                 session_id: 'prod-session',
                 collection_name: collectionId

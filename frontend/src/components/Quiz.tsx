@@ -22,7 +22,7 @@ export default function Quiz({ collectionId }: { collectionId: string }) {
         setSubmitted(false);
         setAnswers({});
         try {
-            const resp = await axios.post('http://localhost:8000/api/v1/learning/quiz', { collection_id: collectionId });
+            const resp = await axios.post('https://ai-learning-assistant-backend-lyhw.onrender.com/api/v1/learning/quiz', { collection_id: collectionId });
             setQuestions(resp.data.questions);
         } catch (err) {
             console.error(err);
@@ -36,7 +36,7 @@ export default function Quiz({ collectionId }: { collectionId: string }) {
     const handleSubmit = async () => {
         setSubmitted(true);
         try {
-            await axios.post(`http://localhost:8000/api/v1/learning/analytics/${collectionId}/score`, {
+            await axios.post(`https://ai-learning-assistant-backend-lyhw.onrender.com/api/v1/learning/analytics/${collectionId}/score`, {
                 score: (score / questions.length) * 100,
                 correct: score,
                 total: questions.length,

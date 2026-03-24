@@ -11,7 +11,7 @@ export default function Summary({ collectionId }: { collectionId: string }) {
     const fetchSummary = async () => {
         setIsLoading(true);
         try {
-            const response = await axios.get(`http://localhost:8000/api/v1/learning/summary/${collectionId}?level=${level}`);
+            const response = await axios.get(`https://ai-learning-assistant-backend-lyhw.onrender.com/api/v1/learning/summary/${collectionId}?level=${level}`);
             setSummary(response.data.summary);
         } catch (err) {
             console.error(err);

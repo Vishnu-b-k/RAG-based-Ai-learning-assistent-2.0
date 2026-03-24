@@ -17,11 +17,11 @@ export default function Gallery({ collectionId }: { collectionId: string }) {
         const fetchImages = async () => {
             try {
                 setIsLoading(true);
-                const res = await axios.get(`http://localhost:8000/api/v1/learning/metadata/${collectionId}`);
+                const res = await axios.get(`https://ai-learning-assistant-backend-lyhw.onrender.com/api/v1/learning/metadata/${collectionId}`);
                 if (res.data.images) {
                     setImages(res.data.images.map((img: any) => ({
                         ...img,
-                        url: `http://localhost:8000${img.url}`
+                        url: `https://ai-learning-assistant-backend-lyhw.onrender.com${img.url}`
                     })));
                 }
             } catch (err) {

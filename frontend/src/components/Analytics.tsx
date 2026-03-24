@@ -21,7 +21,7 @@ export default function Analytics({ collectionId }: { collectionId: string }) {
     useEffect(() => {
         const fetchAnalytics = async () => {
             try {
-                const res = await axios.get(`http://localhost:8000/api/v1/learning/analytics/${collectionId}`);
+                const res = await axios.get(`https://ai-learning-assistant-backend-lyhw.onrender.com/api/v1/learning/analytics/${collectionId}`);
                 setData(res.data);
             } catch (err) {
                 console.error("Failed to load analytics", err);
