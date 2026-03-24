@@ -8,9 +8,12 @@ interface SidebarProps {
     activeCollectionId: string | null;
     activeTab: 'chat' | 'summary' | 'quiz' | 'images' | 'analytics';
     setActiveTab: (tab: 'chat' | 'summary' | 'quiz' | 'images' | 'analytics') => void;
+    isMobileMenuOpen?: boolean;
+    setIsMobileMenuOpen?: (open: boolean) => void;
 }
 
-export default function Sidebar({ onUploadComplete, activeCollectionId, activeTab, setActiveTab }: SidebarProps) {
+export default function Sidebar({ onUploadComplete, activeCollectionId, activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpen }: SidebarProps) {
+
     const [isUploading, setIsUploading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [files, setFiles] = useState<{ name: string, id: string }[]>([]);
@@ -71,14 +74,16 @@ export default function Sidebar({ onUploadComplete, activeCollectionId, activeTa
     ] as const;
 
     return (
-        <div className="w-80 h-full bg-slate-900 text-white flex flex-col p-6 overflow-hidden border-r border-slate-800">
-            <div className="flex items-center gap-3 mb-10 px-2">
-                <div className="w-10 h-10 bg-primary-500 rounded-xl flex items-center justify-center shadow-lg shadow-primary-500/20">
-                    <Sparkles size={24} strokeWidth={2.5} />
-                </div>
-                <div>
-                    <h1 className="font-bold text-lg leading-tight tracking-tight">AI Master</h1>
-                    <p className="text-xs text-slate-500 font-medium">Production Release v1.0</p>
+        <div className={`fixed inset-y-0 left-0 z-50 w-80 h-full bg-slate-900 text-white flex flex-col p-6 overflow-hidden border-r border-slate-800 transition-transform duration-300 ease-in-out md:relative md:translate-x-0 shrink-0 shadow-2xl md:shadow-none ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <div className="flex items-center justify-between mb-10 px-2">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-primary-500 rounded-xl flex items-center justify-center shadow-lg shadow-primary-500/20">
+                        <Sparkles size={24} strokeWidth={2.5} />
+                    </div>
+                    <div>
+                        <h1 className="font-bold text-lg leading-tight tracking-tight">AI Master</h1>
+                        <p className="text-xs text-slate-500 font-medium">Production Release v1.0</p>
+                    </div>
                 </div>
             </div>
 
@@ -90,7 +95,10 @@ export default function Sidebar({ onUploadComplete, activeCollectionId, activeTa
                         {navItems.map((item) => (
                             <button
                                 key={item.id}
-                                onClick={() => setActiveTab(item.id)}
+                                onClick={() => {
+                                    setActiveTab(item.id);
+                                    if (setIsMobileMenuOpen) setIsMobileMenuOpen(false); // Auto-close on mobile
+                                }}
                                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === item.id
                                     ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/20'
                                     : 'text-slate-400 hover:text-white hover:bg-slate-800'
@@ -153,7 +161,10 @@ export default function Sidebar({ onUploadComplete, activeCollectionId, activeTa
                     {files.map((f, i) => (
                         <div
                             key={i}
-                            onClick={() => onUploadComplete(f.id)}
+                            onClick={() => {
+                                onUploadComplete(f.id);
+                                if (setIsMobileMenuOpen) setIsMobileMenuOpen(false); // Close drawer on select
+                            }}
                             className={`group p-4 rounded-xl flex gap-3 items-center transition-all cursor-pointer border ${activeCollectionId === f.id
                                 ? 'bg-slate-800 border-primary-500/30'
                                 : 'bg-slate-800/50 border-slate-700/50 hover:border-primary-500/30'
