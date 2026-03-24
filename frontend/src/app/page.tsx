@@ -41,7 +41,13 @@ export default function Home() {
                             </p>
                             <div className="bg-white/50 backdrop-blur-sm p-8 rounded-[2rem] border border-slate-200/50 shadow-2xl shadow-primary-500/5">
                                 <p className="text-sm text-primary-500 font-bold uppercase tracking-widest">Ready to begin?</p>
-                                <p className="text-xs text-slate-400 mt-2">Upload a PDF transcript in the sidebar</p>
+                                <p className="text-xs text-slate-400 mt-2 hidden md:block">Upload a PDF transcript in the sidebar</p>
+                                <button
+                                    onClick={() => setIsMobileMenuOpen(true)}
+                                    className="md:hidden mt-6 px-6 py-3 w-full bg-primary-500 hover:bg-primary-600 text-white rounded-xl font-bold shadow-lg shadow-primary-500/20 transition-all"
+                                >
+                                    Open Sidebar to Upload
+                                </button>
                             </div>
                         </div>
                     </div>
