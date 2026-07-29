@@ -31,6 +31,6 @@ class LLMService:
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.3, # Professional/Consistent
-            max_tokens=1500
+            max_tokens=800
         )
         return response.choices[0].message.content.strip()
