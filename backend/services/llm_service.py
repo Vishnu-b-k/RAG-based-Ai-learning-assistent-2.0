@@ -10,7 +10,7 @@ class LLMService:
             api_key=self.api_key,
             base_url="https://openrouter.ai/api/v1"
         )
-        self.model = "google/gemini-3.5-flash"
+        self.model = "google/gemma-4-31b-it:free"
 
     async def generate_answer(self, query: str, context: str) -> str:
         """Asynchronous call to the LLM with grounded context."""
