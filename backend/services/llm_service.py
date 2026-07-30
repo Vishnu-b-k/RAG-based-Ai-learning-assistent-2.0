@@ -5,12 +5,12 @@ from typing import Optional
 
 class LLMService:
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+        self.api_key = api_key or os.environ.get("GROQ_API_KEY")
         self.client = AsyncOpenAI(
             api_key=self.api_key,
-            base_url="https://openrouter.ai/api/v1"
+            base_url="https://api.groq.com/openai/v1"
         )
-        self.model = "google/gemma-4-31b-it:free"
+        self.model = "llama-3.3-70b-versatile"
 
     async def generate_answer(self, query: str, context: str) -> str:
         """Asynchronous call to the LLM with grounded context."""
