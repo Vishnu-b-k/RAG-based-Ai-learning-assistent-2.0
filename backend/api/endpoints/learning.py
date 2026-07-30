@@ -1,29 +1,24 @@
 # backend/api/endpoints/learning.py
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
-from services.llm_service import LLMService
-from services.retrieval_service import RetrievalService
 from database.db import get_db
-from database.models import CollectionMeta, ChatSession
+from database.models import Document, DocumentAnalysis, QuizQuestion, ChatSession
 from pydantic import BaseModel
 from typing import List, Optional
-import json
-import re
 
 router = APIRouter()
-llm_svc = LLMService()
 
 class QuizRequest(BaseModel):
     collection_id: str
 
-class QuizQuestion(BaseModel):
+class QuizQuestionSchema(BaseModel):
     question: str
     options: List[str]
     correctAnswerIndex: int
     explanation: str
 
 class QuizResponse(BaseModel):
-    questions: List[QuizQuestion]
+    questions: List[QuizQuestionSchema]
 
 class MetadataResponse(BaseModel):
     collection_id: str
@@ -35,41 +30,22 @@ class MetadataResponse(BaseModel):
 @router.get("/metadata/{collection_id}", response_model=MetadataResponse)
 async def get_metadata(collection_id: str, db: Session = Depends(get_db)):
     try:
-        meta = db.query(CollectionMeta).filter(CollectionMeta.id == collection_id).first()
-        if not meta:
-            raise HTTPException(status_code=404, detail="Collection not found")
+        doc = db.query(Document).filter(Document.id == collection_id).first()
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
             
-        # If topics or suggested questions are empty, generate them
-        if not meta.topics or not meta.suggested_questions:
-            try:
-                docs = meta.chunks[:10] if meta.chunks else []
-                context = "\n".join(docs)
-                
-                prompt = (
-                    "Based on this transcript, provide a JSON object with two keys:\n"
-                    "- 'topics': a list of 3-5 main topics covered.\n"
-                    "- 'questions': a list of 3 thought-provoking questions a student might ask.\n"
-                )
-                raw = await llm_svc.generate_answer(prompt, context)
-                match = re.search(r"\{.*\}", raw, re.DOTALL)
-                data = json.loads(match.group(0)) if match else json.loads(raw)
-                
-                meta.topics = data.get("topics", [])
-                meta.suggested_questions = data.get("questions", [])
-            except Exception as e:
-                import logging
-                logging.error(f"Failed to generate metadata for {collection_id}: {e}")
-                meta.topics = ["Topics unavailable (Rate Limited)"]
-                meta.suggested_questions = []
-            
-            db.commit()
-            
+        analysis = db.query(DocumentAnalysis).filter(DocumentAnalysis.document_id == collection_id).first()
+        
+        # If analysis isn't ready yet, return empty fields gracefully
+        topics = analysis.topics_json if analysis else []
+        questions = analysis.key_concepts_json if analysis else [] # Mapping key concepts to suggested questions
+        
         return {
-            "collection_id": meta.id,
-            "filename": meta.filename,
-            "topics": meta.topics,
-            "suggested_questions": meta.suggested_questions,
-            "images": meta.images or []
+            "collection_id": doc.id,
+            "filename": doc.filename,
+            "topics": topics,
+            "suggested_questions": questions,
+            "images": [] # Images removed in new schema, return empty for frontend compat
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -82,16 +58,13 @@ class AnalyticsResponse(BaseModel):
 @router.get("/analytics/{collection_id}", response_model=AnalyticsResponse)
 async def get_analytics(collection_id: str, db: Session = Depends(get_db)):
     try:
-        meta = db.query(CollectionMeta).filter(CollectionMeta.id == collection_id).first()
+        analysis = db.query(DocumentAnalysis).filter(DocumentAnalysis.document_id == collection_id).first()
         session = db.query(ChatSession).filter(ChatSession.collection_id == collection_id).first()
         
-        if not meta or not session:
-            raise HTTPException(status_code=404, detail="Data not found")
-            
         return {
-            "topics": meta.topics or [],
-            "progress": session.progress or {},
-            "quiz_scores": session.quiz_scores or []
+            "topics": analysis.topics_json if analysis else [],
+            "progress": session.progress if session else {},
+            "quiz_scores": session.quiz_scores if session else []
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -107,7 +80,9 @@ async def save_quiz_score(collection_id: str, request: QuizScoreRequest, db: Ses
     try:
         session = db.query(ChatSession).filter(ChatSession.collection_id == collection_id).first()
         if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
+            # Create session if missing
+            session = ChatSession(id=f"sess_{collection_id}", collection_id=collection_id)
+            db.add(session)
             
         current_scores = session.quiz_scores.copy() if session.quiz_scores else []
         current_scores.append({
@@ -125,42 +100,30 @@ async def save_quiz_score(collection_id: str, request: QuizScoreRequest, db: Ses
 @router.get("/summary/{collection_id}")
 async def get_summary(collection_id: str, level: str = "detailed", db: Session = Depends(get_db)):
     try:
-        meta = db.query(CollectionMeta).filter(CollectionMeta.id == collection_id).first()
-        if not meta:
-            raise HTTPException(status_code=404, detail="Collection not found")
+        analysis = db.query(DocumentAnalysis).filter(DocumentAnalysis.document_id == collection_id).first()
+        if not analysis:
+            return {"summary": "Summary is still being generated. Please wait."}
             
-        docs = meta.chunks[:20] if meta.chunks else []
-        context = "\n".join(docs)
-        
-        prompt = f"Summarize this lecture transcript at a {level} level. Use markdown formatting."
-        summary = await llm_svc.generate_answer(prompt, context)
-        return {"summary": summary}
+        return {"summary": analysis.summary}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/quiz", response_model=QuizResponse)
 async def generate_quiz(request: QuizRequest, db: Session = Depends(get_db)):
     try:
-        meta = db.query(CollectionMeta).filter(CollectionMeta.id == request.collection_id).first()
-        if not meta:
-            raise HTTPException(status_code=404, detail="Collection not found")
+        quizzes = db.query(QuizQuestion).filter(QuizQuestion.document_id == request.collection_id).all()
+        if not quizzes:
+            return {"questions": []}
             
-        docs = meta.chunks[:20] if meta.chunks else []
-        context = "\n".join(docs)
-        
-        system = (
-            "Generate 5 multiple-choice questions STRICTLY and EXCLUSIVELY based on the provided transcript below.\n"
-            "DO NOT include any questions that cannot be answered using ONLY the transcript text.\n"
-            "If the transcript is too short or empty, return basic comprehension questions strictly limited to the text shown.\n"
-            "Return a JSON object with a 'questions' key containing the list of question objects.\n"
-            "Each object must have 'question', 'options' (array of 4 distinct plausible strings), "
-            "'correctAnswerIndex' (integer 0-3), and 'explanation' (explaining why based on the transcript)."
-        )
-        raw = await llm_svc.generate_answer(system, context)
-        
-        # Clean JSON and parse
-        match = re.search(r"\{.*\}", raw, re.DOTALL)
-        data = json.loads(match.group(0)) if match else json.loads(raw)
-        return data
+        formatted_questions = []
+        for q in quizzes:
+            formatted_questions.append({
+                "question": q.question,
+                "options": q.options_json,
+                "correctAnswerIndex": q.answer_index,
+                "explanation": q.explanation
+            })
+            
+        return {"questions": formatted_questions}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

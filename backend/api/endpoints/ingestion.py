@@ -1,75 +1,82 @@
 # backend/api/endpoints/ingestion.py
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
 from services.pdf_service import PDFService
 from database.db import get_db
-from database.models import CollectionMeta, ChatSession
+from database.models import Document, DocumentChunk, AnalysisJob
+from services.pipeline_service import run_analysis_pipeline
 import uuid
-import os
+import hashlib
 
 router = APIRouter()
 pdf_svc = PDFService()
 
 @router.post("/upload")
-async def upload_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_pdf(background_tasks: BackgroundTasks, file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
         
     try:
         content = await file.read()
         
-        # 1. Extraction
-        text, images = pdf_svc.extract_text_and_images(content)
+        # Deduplication using SHA256
+        file_hash = hashlib.sha256(content).hexdigest()
+        existing_doc = db.query(Document).filter(Document.file_hash == file_hash).first()
+        if existing_doc:
+            return {
+                "status": "success",
+                "message": "Document already exists.",
+                "document_id": existing_doc.id,
+                "doc_status": existing_doc.status
+            }
         
-        # 2. Chunking
+        # 1. Extraction & Chunking
+        text, images = pdf_svc.extract_text_and_images(content)
         chunks = pdf_svc.recursive_split(text)
         
-        # 3. Generating Collection ID
-        collection_id = f"doc_{uuid.uuid4().hex[:8]}"
-        
-        # 4. Save Images and build metadata
-        saved_images = []
-        for idx, img in enumerate(images):
-            img_filename = f"{collection_id}_{idx}.{img['ext']}"
-            img_path = os.path.join("./data/images", img_filename)
-            with open(img_path, "wb") as f:
-                f.write(img["bytes"])
-            saved_images.append({
-                "url": f"/images/{img_filename}",
-                "caption": img["caption"],
-                "page": img["page"]
-            })
-            
-        # 5. Save to Database
-        db_collection = CollectionMeta(
-            id=collection_id,
+        # 2. Database Insertion
+        document_id = f"doc_{uuid.uuid4().hex[:8]}"
+        new_doc = Document(
+            id=document_id,
             filename=file.filename,
-            topics=[],
-            suggested_questions=[],
-            images=saved_images,
-            chunks=chunks
+            file_hash=file_hash,
+            status="UPLOADED"
         )
-        db.add(db_collection)
+        db.add(new_doc)
         
-        # Initialize default chat session for this collection
-        db_session = ChatSession(
-            id=f"sess_{uuid.uuid4().hex[:8]}",
-            collection_id=collection_id,
-            progress={},
-            history=[],
-            quiz_scores=[]
+        for idx, chunk_text in enumerate(chunks):
+            db.add(DocumentChunk(
+                id=f"chk_{uuid.uuid4().hex[:8]}",
+                document_id=document_id,
+                chunk_index=idx,
+                content=chunk_text,
+                token_count=len(chunk_text.split()) # simple token estimate
+            ))
+            
+        new_job = AnalysisJob(
+            id=f"job_{uuid.uuid4().hex[:8]}",
+            document_id=document_id,
+            status="PENDING"
         )
-        db.add(db_session)
-        
+        db.add(new_job)
         db.commit()
+        
+        # 3. Queue Background Analysis
+        background_tasks.add_task(run_analysis_pipeline, document_id, text)
         
         return {
             "status": "success",
-            "filename": file.filename,
-            "collection_id": collection_id,
-            "session_id": db_session.id,
-            "chunks_count": len(chunks),
-            "images_count": len(images)
+            "message": "Analysis queued.",
+            "document_id": document_id,
+            "doc_status": "PROCESSING"
         }
     except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+
+@router.get("/status/{document_id}")
+async def get_status(document_id: str, db: Session = Depends(get_db)):
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"document_id": doc.id, "status": doc.status}
