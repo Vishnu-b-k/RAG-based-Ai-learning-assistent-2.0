@@ -16,14 +16,46 @@ export default function Sidebar({ onUploadComplete, activeCollectionId, activeTa
 
     const [isUploading, setIsUploading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [files, setFiles] = useState<{ name: string, id: string }[]>([]);
+    const [files, setFiles] = useState<{ name: string, id: string, status: string }[]>([]);
     const [topics, setTopics] = useState<string[]>([]);
     const [isLoadingTopics, setIsLoadingTopics] = useState(false);
 
-    // Fetch topics whenever the active collection changes
+    // Poll for files that are processing
+    useEffect(() => {
+        const processingFiles = files.filter(f => f.status === 'PROCESSING');
+        if (processingFiles.length === 0) return;
+
+        const interval = setInterval(async () => {
+            try {
+                const updatedFiles = await Promise.all(
+                    processingFiles.map(async (file) => {
+                        const res = await axios.get(`https://ai-learning-assistant-backend-lyhw.onrender.com/api/v1/ingestion/status/${file.id}`);
+                        return { id: file.id, status: res.data.status };
+                    })
+                );
+
+                setFiles(prev => prev.map(f => {
+                    const updated = updatedFiles.find(u => u.id === f.id);
+                    return updated ? { ...f, status: updated.status } : f;
+                }));
+            } catch (err) {
+                console.error("Failed to poll status", err);
+            }
+        }, 3000);
+
+        return () => clearInterval(interval);
+    }, [files]);
+
+    // Fetch topics whenever the active collection changes and is READY
     useEffect(() => {
         const fetchTopics = async () => {
             if (!activeCollectionId) return;
+            const activeFile = files.find(f => f.id === activeCollectionId);
+            if (activeFile && activeFile.status !== 'READY') {
+                setTopics([]);
+                return;
+            }
+
             setIsLoadingTopics(true);
             try {
                 const res = await axios.get(`https://ai-learning-assistant-backend-lyhw.onrender.com/api/v1/learning/metadata/${activeCollectionId}`);
@@ -37,7 +69,7 @@ export default function Sidebar({ onUploadComplete, activeCollectionId, activeTa
             }
         };
         fetchTopics();
-    }, [activeCollectionId]);
+    }, [activeCollectionId, files]); // Re-run when files (status) changes
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -54,8 +86,10 @@ export default function Sidebar({ onUploadComplete, activeCollectionId, activeTa
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
 
-            const newFile = { name: file.name, id: response.data.collection_id };
+            const newFile = { name: file.name, id: response.data.document_id, status: response.data.doc_status };
             setFiles(prev => [newFile, ...prev]);
+            
+            // Set as active collection immediately, UI will show it's processing
             onUploadComplete(newFile.id);
         } catch (err) {
             setError('Upload failed. Check backend connection.');
@@ -162,17 +196,28 @@ export default function Sidebar({ onUploadComplete, activeCollectionId, activeTa
                         <div
                             key={i}
                             onClick={() => {
+                                if (f.status === 'PROCESSING') return;
                                 onUploadComplete(f.id);
                                 if (setIsMobileMenuOpen) setIsMobileMenuOpen(false); // Close drawer on select
                             }}
-                            className={`group p-4 rounded-xl flex gap-3 items-center transition-all cursor-pointer border ${activeCollectionId === f.id
+                            className={`group p-4 rounded-xl flex gap-3 items-center transition-all ${f.status === 'PROCESSING' ? 'cursor-wait opacity-60' : 'cursor-pointer'} border ${activeCollectionId === f.id
                                 ? 'bg-slate-800 border-primary-500/30'
                                 : 'bg-slate-800/50 border-slate-700/50 hover:border-primary-500/30'
                                 }`}
                         >
 
-                            <CheckCircle2 size={18} className="text-emerald-500" />
-                            <p className="text-sm font-medium text-slate-300 truncate transition-colors group-hover:text-white">{f.name}</p>
+                            {f.status === 'PROCESSING' ? (
+                                <Loader2 size={18} className="text-emerald-500 animate-spin" />
+                            ) : f.status === 'FAILED' ? (
+                                <AlertCircle size={18} className="text-red-500" />
+                            ) : (
+                                <CheckCircle2 size={18} className="text-emerald-500" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-slate-300 truncate transition-colors group-hover:text-white">{f.name}</p>
+                                {f.status === 'PROCESSING' && <p className="text-[10px] text-emerald-500 font-medium">Analyzing...</p>}
+                                {f.status === 'FAILED' && <p className="text-[10px] text-red-500 font-medium">Analysis Failed</p>}
+                            </div>
                         </div>
                     ))}
                     {files.length === 0 && (

@@ -29,18 +29,6 @@ export default function Summary({ collectionId }: { collectionId: string }) {
                     </div>
                     <h3 className="font-bold text-slate-800">Smart Summary</h3>
                 </div>
-                <div className="flex gap-2 p-1 bg-slate-50 rounded-xl border border-slate-100">
-                    {(['brief', 'detailed', 'comprehensive'] as const).map(l => (
-                        <button
-                            key={l}
-                            onClick={() => setLevel(l)}
-                            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${level === l ? 'bg-white text-primary-500 shadow-sm' : 'text-slate-400 hover:text-slate-600'
-                                }`}
-                        >
-                            {l.charAt(0).toUpperCase() + l.slice(1)}
-                        </button>
-                    ))}
-                </div>
             </div>
 
             {!summary ? (
