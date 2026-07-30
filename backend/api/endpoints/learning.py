@@ -41,20 +41,26 @@ async def get_metadata(collection_id: str, db: Session = Depends(get_db)):
             
         # If topics or suggested questions are empty, generate them
         if not meta.topics or not meta.suggested_questions:
-            docs = meta.chunks[:10] if meta.chunks else []
-            context = "\n".join(docs)
-            
-            prompt = (
-                "Based on this transcript, provide a JSON object with two keys:\n"
-                "- 'topics': a list of 3-5 main topics covered.\n"
-                "- 'questions': a list of 3 thought-provoking questions a student might ask.\n"
-            )
-            raw = await llm_svc.generate_answer(prompt, context)
-            match = re.search(r"\{.*\}", raw, re.DOTALL)
-            data = json.loads(match.group(0)) if match else json.loads(raw)
-            
-            meta.topics = data.get("topics", [])
-            meta.suggested_questions = data.get("questions", [])
+            try:
+                docs = meta.chunks[:10] if meta.chunks else []
+                context = "\n".join(docs)
+                
+                prompt = (
+                    "Based on this transcript, provide a JSON object with two keys:\n"
+                    "- 'topics': a list of 3-5 main topics covered.\n"
+                    "- 'questions': a list of 3 thought-provoking questions a student might ask.\n"
+                )
+                raw = await llm_svc.generate_answer(prompt, context)
+                match = re.search(r"\{.*\}", raw, re.DOTALL)
+                data = json.loads(match.group(0)) if match else json.loads(raw)
+                
+                meta.topics = data.get("topics", [])
+                meta.suggested_questions = data.get("questions", [])
+            except Exception as e:
+                import logging
+                logging.error(f"Failed to generate metadata for {collection_id}: {e}")
+                meta.topics = ["Topics unavailable (Rate Limited)"]
+                meta.suggested_questions = []
             
             db.commit()
             
